@@ -6,19 +6,20 @@
 #define RASTERIZER_MODEL_H
 
 #include <vector>
+
 #include "vec3.h"
 class Model {
-    std::vector<vec3> vertices = {};
-    std::vector<int> face_vertices = {};
-public:
-    Model(const std::string filename);
-    int nverts() const;
-    int nfaces() const;
-    vec3 vertex(const int i) const;
-    vec3 vertex(const int iface, const int nthvertex) const;
+  std::vector<vec3> vertices = {};
+  std::vector<int> face_vertices = {};
 
-    void normalize();
+ public:
+  Model(const std::string filename);
+  int nverts() const;
+  int nfaces() const;
+  vec3 vertex(const int i) const;
+  vec3 vertex(const int iface, const int nthvertex) const;
+
+  void normalize();
 };
 
-
-#endif //RASTERIZER_MODEL_H
+#endif  // RASTERIZER_MODEL_H
