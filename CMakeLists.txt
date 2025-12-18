@@ -1,9 +1,16 @@
-cmake_minimum_required(VERSION 4.1)
+cmake_minimum_required(VERSION 3.16)
 project(Rasterizer)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(Rasterizer main.cpp
-        tgaimage.cpp
-        tgaimage.h
-        tgaimage.h)
+# Include headers
+include_directories(include)
+
+# Source files
+set(SOURCES
+    src/main.cpp
+    src/tgaimage.cpp
+    src/model.cpp
+)
+
+add_executable(Rasterizer ${SOURCES})

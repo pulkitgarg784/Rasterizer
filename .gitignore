@@ -1,0 +1,17 @@
+# Build
+build/
+cmake-build-*/
+
+# IDE
+.vscode/
+.idea/
+.cache/
+*.swp
+
+# Compiled
+*.o
+*.out
+*.tga
+
+compile_commands.json
+.clangd
