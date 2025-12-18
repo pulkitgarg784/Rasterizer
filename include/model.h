@@ -7,7 +7,7 @@
 
 #include <vector>
 
-#include "vec3.h"
+#include "vec.h"
 class Model {
   std::vector<vec3> vertices = {};
   std::vector<int> face_vertices = {};

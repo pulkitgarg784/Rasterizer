@@ -2,6 +2,7 @@
 
 #include "model.h"
 #include "tgaimage.h"
+#include "matrix.h"
 
 constexpr TGAColor white = {255, 255, 255, 255};  // attention, BGRA order
 constexpr TGAColor green = {0, 255, 0, 255};
@@ -13,8 +14,8 @@ constexpr int width = 800;
 constexpr int height = 800;
 
 std::tuple<int, int, int> project(vec3 v) {
-  return {(v.x + 1.) * width / 2, (v.y + 1.) * height / 2,
-          (v.z + 1.) * 255.0 / 2};
+  return {(v.x() + 1.) * width / 2, (v.y() + 1.) * height / 2,
+          (v.z() + 1.) * 255.0 / 2};
 }
 
 void line(int ax, int ay, int bx, int by, TGAImage& framebuffer,
