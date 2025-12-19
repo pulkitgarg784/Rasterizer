@@ -101,6 +101,7 @@ struct vec {
     return l > 0 ? *this / l : vec<N>();
   }
 
+
   friend vec<N> operator*(double t, const vec<N>& v) { return v * t; }
 
   friend std::ostream& operator<<(std::ostream& out, const vec<N>& v) {
@@ -130,6 +131,9 @@ inline vec3 cross(const vec3& u, const vec3& v) {
                 u[2] * v[0] - u[0] * v[2],
                 u[0] * v[1] - u[1] * v[0]);
 }
+
+template <int N>
+double norm(const vec<N>& v) { return std::sqrt(v.dot(v)); }
 
 template <int N> double& x(vec<N>& v) { static_assert(N >= 1); return v[0]; }
 template <int N> double& y(vec<N>& v) { static_assert(N >= 2); return v[1]; }
