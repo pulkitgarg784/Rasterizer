@@ -37,7 +37,10 @@ void lookat(const vec3 eye, const vec3 center, const vec3 up) {
 }
 
 void perspective(const double f) {
-  Perspective = {{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, -1 / f, 1}}};
+  // Scale x and y by 1/f to maintain constant FOV (90 degrees)
+  // otherwise the object size stays constant on screen (Dolly Zoom effect)
+  double d = (f < 1e-6) ? 1e-6 : f;
+  Perspective = {{{1/d, 0, 0, 0}, {0, 1/d, 0, 0}, {0, 0, 1, 0}, {0, 0, -1 / d, 1}}};
 }
 
 void viewport(const int x, const int y, const int w, const int h) {
@@ -164,6 +167,37 @@ int main(int argc, char** argv) {
 
     ImGui::Begin("Debug Info");
     ImGui::Text("FPS: %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+
+    static bool lock_target = false;
+    ImGui::Checkbox("Lock Target (Strafe)", &lock_target);
+
+    bool camera_changed = false;
+    float eye_pos[3] = { (float)eye[0], (float)eye[1], (float)eye[2] };
+    if (ImGui::DragFloat3("Camera Position", eye_pos, 0.1f)) {
+        if (lock_target) {
+            center[0] += eye_pos[0] - eye[0];
+            center[1] += eye_pos[1] - eye[1];
+            center[2] += eye_pos[2] - eye[2];
+        }
+        eye[0] = eye_pos[0];
+        eye[1] = eye_pos[1];
+        eye[2] = eye_pos[2];
+        camera_changed = true;
+    }
+    
+    float center_pos[3] = { (float)center[0], (float)center[1], (float)center[2] };
+    if (ImGui::DragFloat3("Camera Target", center_pos, 0.1f)) {
+        center[0] = center_pos[0];
+        center[1] = center_pos[1];
+        center[2] = center_pos[2];
+        camera_changed = true;
+    }
+
+    if (camera_changed) {
+        lookat(eye, center, up);
+        perspective(norm(eye - center));
+    }
+
     ImGui::End();
 
     // Rendering
