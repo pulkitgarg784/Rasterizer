@@ -15,6 +15,9 @@ endif()
 
 # Include headers
 include_directories(include)
+include_directories(imgui)
+include_directories(imgui/backends)
+include_directories(imgui/misc/cpp)
 
 # Find SDL2
 find_package(SDL2 REQUIRED)
@@ -28,6 +31,14 @@ set(SOURCES
     src/main.cpp
     src/tgaimage.cpp
     src/model.cpp
+    imgui/imgui.cpp
+    imgui/imgui_demo.cpp
+    imgui/imgui_draw.cpp
+    imgui/imgui_tables.cpp
+    imgui/imgui_widgets.cpp
+    imgui/backends/imgui_impl_sdl2.cpp
+    imgui/backends/imgui_impl_sdlrenderer2.cpp
+    imgui/misc/cpp/imgui_stdlib.cpp
 )
 
 add_executable(Rasterizer ${SOURCES})

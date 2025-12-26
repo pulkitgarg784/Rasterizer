@@ -6,6 +6,10 @@
 #include "matrix.h"
 #include "model.h"
 #include "tgaimage.h"
+#include "imgui.h"
+#include "imgui_impl_sdl2.h"
+#include "imgui_impl_sdlrenderer2.h"
+#include "imgui_stdlib.h"
 
 constexpr TGAColor white = {255, 255, 255, 255};
 constexpr TGAColor green = {0, 255, 0, 255};
@@ -107,6 +111,20 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  // Setup ImGui context
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGuiIO& io = ImGui::GetIO(); (void)io;
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+  // Setup Dear ImGui style
+  ImGui::StyleColorsDark();
+
+  // Setup Platform/Renderer backends
+  ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
+  ImGui_ImplSDLRenderer2_Init(renderer);
+
   SDL_Texture* texture =
       SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGR24,
                         SDL_TEXTUREACCESS_STREAMING, width, height);
@@ -128,22 +146,28 @@ int main(int argc, char** argv) {
   
   Uint32 frameCount = 0;
   Uint32 lastTime = SDL_GetTicks();
-  double fps = 0;
-  
-  // Load models once
-  std::vector<Model> models;
-  for (int m = 1; m < argc; m++) {
-    models.emplace_back(argv[m]);
-  }
 
   while (!end) {
     // Handle Events
     while (SDL_PollEvent(&event)) {
+      ImGui_ImplSDL2_ProcessEvent(&event);
       if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && 
           event.key.keysym.sym == SDLK_ESCAPE) {
         end = true;
       }
     }
+
+    // Start the Dear ImGui frame
+    ImGui_ImplSDLRenderer2_NewFrame();
+    ImGui_ImplSDL2_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::Begin("Debug Info");
+    ImGui::Text("FPS: %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+    ImGui::End();
+
+    // Rendering
+    ImGui::Render();
 
     // Clear Buffers
     framebuffer.clear();
@@ -171,22 +195,16 @@ int main(int argc, char** argv) {
 
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+    ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
     SDL_RenderPresent(renderer);
-    
-    frameCount++;
-    Uint32 currentTime = SDL_GetTicks();
-    if (currentTime - lastTime >= 1000) {
-      fps = frameCount * 1000.0 / (currentTime - lastTime);
-      frameCount = 0;
-      lastTime = currentTime;
-      
-      char title[64];
-      std::snprintf(title, sizeof(title), "Renderer - FPS: %.1f", fps);
-      SDL_SetWindowTitle(window, title);
-    }
+  
   }
 
   // Cleanup
+  ImGui_ImplSDLRenderer2_Shutdown();
+  ImGui_ImplSDL2_Shutdown();
+  ImGui::DestroyContext();
+
   SDL_DestroyTexture(texture);
   SDL_DestroyRenderer(renderer);
   SDL_DestroyWindow(window);
