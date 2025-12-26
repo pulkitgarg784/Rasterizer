@@ -1,10 +1,13 @@
+#include <SDL2/SDL.h>
+
+#include <cstdio>
 #include <iostream>
 
 #include "matrix.h"
 #include "model.h"
 #include "tgaimage.h"
 
-constexpr TGAColor white = {255, 255, 255, 255};  // attention, BGRA order
+constexpr TGAColor white = {255, 255, 255, 255};
 constexpr TGAColor green = {0, 255, 0, 255};
 constexpr TGAColor red = {0, 0, 255, 255};
 constexpr TGAColor blue = {255, 128, 64, 255};
@@ -16,21 +19,29 @@ constexpr int height = 800;
 mat4 ModelView, Viewport, Perspective;
 
 void lookat(const vec3 eye, const vec3 center, const vec3 up) {
-    vec3 n = normalize(eye-center);
-    vec3 l = normalize(cross(up,n));
-    vec3 m = normalize(cross(n, l));
-    ModelView = mat<4,4>{{{l.x(),l.y(),l.z(),0}, {m.x(),m.y(),m.z(),0}, {n.x(),n.y(),n.z(),0}, {0,0,0,1}}} *
-                mat<4,4>{{{1,0,0,-center.x()}, {0,1,0,-center.y()}, {0,0,1,-center.z()}, {0,0,0,1}}};
+  vec3 n = normalize(eye - center);
+  vec3 l = normalize(cross(up, n));
+  vec3 m = normalize(cross(n, l));
+  ModelView = mat<4, 4>{{{l.x(), l.y(), l.z(), 0},
+                         {m.x(), m.y(), m.z(), 0},
+                         {n.x(), n.y(), n.z(), 0},
+                         {0, 0, 0, 1}}} *
+              mat<4, 4>{{{1, 0, 0, -center.x()},
+                         {0, 1, 0, -center.y()},
+                         {0, 0, 1, -center.z()},
+                         {0, 0, 0, 1}}};
 }
 
 void perspective(const double f) {
-    Perspective = {{{1,0,0,0}, {0,1,0,0}, {0,0,1,0}, {0,0, -1/f,1}}};
+  Perspective = {{{1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}, {0, 0, -1 / f, 1}}};
 }
 
 void viewport(const int x, const int y, const int w, const int h) {
-    Viewport = {{{w/2., 0, 0, x+w/2.}, {0, h/2., 0, y+h/2.}, {0,0,1,0}, {0,0,0,1}}};
+  Viewport = {{{w / 2., 0, 0, x + w / 2.},
+               {0, h / 2., 0, y + h / 2.},
+               {0, 0, 1, 0},
+               {0, 0, 0, 1}}};
 }
-
 
 void rasterize(const vec4 clip[3], std::vector<double>& zbuffer,
                TGAImage& framebuffer, const TGAColor color) {
@@ -61,7 +72,7 @@ void rasterize(const vec4 clip[3], std::vector<double>& zbuffer,
       double z = dot(bc, vec3(ndc[0].z(), ndc[1].z(), ndc[2].z()));
       if (z <= zbuffer[x + y * framebuffer.width()]) continue;
       zbuffer[x + y * framebuffer.width()] = z;
-      framebuffer.set(x, y, color);
+      framebuffer.set(x, framebuffer.height() - 1 - y, color);
     }
   }
 }
@@ -72,35 +83,114 @@ int main(int argc, char** argv) {
     return 1;
   }
 
+  if (SDL_Init(SDL_INIT_VIDEO) != 0) {
+    std::cerr << "Could not init SDL: " << SDL_GetError() << std::endl;
+    return 1;
+  }
+
   constexpr int width = 800;
   constexpr int height = 800;
+
+  SDL_Window* window =
+      SDL_CreateWindow("Renderer", 100, 100, width, height, SDL_WINDOW_SHOWN);
+  if (!window) {
+    std::cerr << "Could not create SDL window: " << SDL_GetError() << std::endl;
+    SDL_Quit();
+    return 1;
+  }
+  SDL_Renderer* renderer = SDL_CreateRenderer(
+      window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+  if (!renderer) {
+    SDL_DestroyWindow(window);
+    std::cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
+    SDL_Quit();
+    return 1;
+  }
+
+  SDL_Texture* texture =
+      SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGR24,
+                        SDL_TEXTUREACCESS_STREAMING, width, height);
+
   vec3 eye{-1, 0, 2};
   vec3 center{0, 0, 0};
   vec3 up{0, 1, 0};
 
   lookat(eye, center, up);
   perspective(norm(eye - center));
-  viewport(width / 16, height / 16, width * 7 / 8,
-           height * 7 / 8);
+  viewport(width / 16, height / 16, width * 7 / 8, height * 7 / 8);
 
   TGAImage framebuffer(width, height, TGAImage::RGB);
   std::vector<double> zbuffer(width * height,
                               -std::numeric_limits<double>::max());
 
+  bool end = false;
+  SDL_Event event;
+  
+  Uint32 frameCount = 0;
+  Uint32 lastTime = SDL_GetTicks();
+  double fps = 0;
+  
+  // Load models once
+  std::vector<Model> models;
   for (int m = 1; m < argc; m++) {
-    Model model(argv[m]);
-    for (int i = 0; i < model.nfaces(); i++) {
-      vec4 clip[3];
-      for (int d : {0, 1, 2}) {
-        vec3 v = model.vertex(i, d);
-        clip[d] = Perspective * ModelView * vec4{v.x(), v.y(), v.z(), 1.};
+    models.emplace_back(argv[m]);
+  }
+
+  while (!end) {
+    // Handle Events
+    while (SDL_PollEvent(&event)) {
+      if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && 
+          event.key.keysym.sym == SDLK_ESCAPE) {
+        end = true;
       }
-      TGAColor rnd;
-      for (int c = 0; c < 3; c++) rnd[c] = std::rand() % 255;
-      rasterize(clip, zbuffer, framebuffer, rnd);
+    }
+
+    // Clear Buffers
+    framebuffer.clear();
+    std::fill(zbuffer.begin(), zbuffer.end(),
+              -std::numeric_limits<double>::max());
+
+    // Rendering loop
+    for (int m = 1; m < argc; m++) {
+      Model model(argv[m]);
+      for (int i = 0; i < model.nfaces(); i++) {
+        vec4 clip[3];
+        for (int d : {0, 1, 2}) {
+          vec3 v = model.vertex(i, d);
+          clip[d] = Perspective * ModelView * vec4{v.x(), v.y(), v.z(), 1.};
+        }
+        TGAColor color = white;
+        for (int c = 0; c < 3; c++) color[c] = std::rand() % 255;
+
+        rasterize(clip, zbuffer, framebuffer, color);
+      }
+    }
+
+    // Update Screen
+    SDL_UpdateTexture(texture, nullptr, framebuffer.buffer(), width * 3);
+
+    SDL_RenderClear(renderer);
+    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+    SDL_RenderPresent(renderer);
+    
+    frameCount++;
+    Uint32 currentTime = SDL_GetTicks();
+    if (currentTime - lastTime >= 1000) {
+      fps = frameCount * 1000.0 / (currentTime - lastTime);
+      frameCount = 0;
+      lastTime = currentTime;
+      
+      char title[64];
+      std::snprintf(title, sizeof(title), "Renderer - FPS: %.1f", fps);
+      SDL_SetWindowTitle(window, title);
     }
   }
 
-  framebuffer.write_tga_file("framebuffer.tga");
+  // Cleanup
+  SDL_DestroyTexture(texture);
+  SDL_DestroyRenderer(renderer);
+  SDL_DestroyWindow(window);
+  SDL_Quit();
+
   return 0;
 }
