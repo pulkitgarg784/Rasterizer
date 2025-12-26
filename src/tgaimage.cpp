@@ -201,3 +201,11 @@ void TGAImage::flip_vertically() {
 int TGAImage::width() const { return w; }
 
 int TGAImage::height() const { return h; }
+
+void TGAImage::clear() {
+  std::fill(data.begin(), data.end(), 0);
+}
+
+std::uint8_t* TGAImage::buffer() {
+  return data.data();
+}
