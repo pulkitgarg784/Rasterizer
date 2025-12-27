@@ -39,10 +39,40 @@ struct RandomShader : IShader {
   }
 
   virtual std::pair<bool, TGAColor> fragment(const vec3 bar) const {
-    // TGAColor color;
-    // for (int c = 0; c < 3; c++) color[c] = std::rand() % 255;
+    TGAColor color;
+    for (int c = 0; c < 3; c++) color[c] = std::rand() % 255;
     return {false, color};
   }
+};
+
+struct PhongShader : IShader {
+    const Model &model;
+    vec3 l; // light direction
+    vec3 tri[3];
+
+    PhongShader(const vec3 light, const Model &m) : model(m) {
+        vec4 light_transformed = ModelView*vec4{light.x(), light.y(), light.z(), 0.};
+        l = normalize(vec3{light_transformed.x(), light_transformed.y(), light_transformed.z()});
+    }
+
+    virtual vec4 vertex(const int face, const int vert) {
+        vec3 v = model.vertex(face, vert);                          // current vertex in object coordinates
+        vec4 gl_Position = ModelView * vec4{v.x(), v.y(), v.z(), 1.};
+        tri[vert] = vec3{gl_Position.x(), gl_Position.y(), gl_Position.z()};                            // in eye coordinates
+        return Perspective * gl_Position;                         // in clip coordinates
+    }
+
+    virtual std::pair<bool,TGAColor> fragment(const vec3 bar) const {
+        TGAColor gl_FragColor = {255, 255, 255, 255};             // output color of the fragment
+        vec3 n = normalize(cross(tri[1]-tri[0], tri[2]-tri[0])); // triangle normal in eye coordinates
+        vec3 r = normalize(n * (dot(n, l) * 2.0) - l);           // reflected light direction
+        double ambient = .3;                                      // ambient light intensity
+        double diff = std::max(0., dot(n, l));                    // diffuse light intensity
+        double spec = std::pow(std::max(r.z(), 0.), 35);          // specular intensity, note that the camera lies on the z-axis (in eye coordinates), therefore simple r.z, since (0,0,1)*(r.x, r.y, r.z) = r.z
+        for (int channel : {0,1,2})
+            gl_FragColor[channel] *= std::min(1., ambient + .4*diff + .9*spec);
+        return {false, gl_FragColor};                             // do not discard the pixel
+    }
 };
 
 
@@ -97,6 +127,7 @@ int main(int argc, char** argv) {
   vec3 eye{-1, 0, 2};
   vec3 center{0, 0, 0};
   vec3 up{0, 1, 0};
+  vec3 light_dir{1, 1, 1};
 
   // Model rotation angles (in degrees)
   float rotation[3] = {0.0f, 0.0f, 0.0f};
@@ -130,7 +161,7 @@ int main(int argc, char** argv) {
     ImGui::NewFrame();
 
     ImGui::Begin("Debug Info");
-    ImGui::Text("FPS: %.3f ms/frame (%.1f FPS)", 1000.0f / io.Framerate, io.Framerate);
+    ImGui::Text("FPS: %.1f FPS (%.3f ms/frame)", io.Framerate, 1000.0f / io.Framerate);
 
     static bool lock_target = false;
     ImGui::Checkbox("Lock Target (Strafe)", &lock_target);
@@ -177,6 +208,14 @@ int main(int argc, char** argv) {
         rotation[0] = rotation[1] = rotation[2] = 0.0f;
     }
 
+    ImGui::Separator();
+    float light_pos[3] = { (float)light_dir[0], (float)light_dir[1], (float)light_dir[2] };
+    if (ImGui::DragFloat3("Light Direction", light_pos, 0.1f)) {
+        light_dir[0] = light_pos[0];
+        light_dir[1] = light_pos[1];
+        light_dir[2] = light_pos[2];
+    }
+
     ImGui::End();
 
     // Rendering
@@ -185,6 +224,7 @@ int main(int argc, char** argv) {
     // Clear Buffers
     framebuffer.clear();
     init_zbuffer(width, height);
+    lookat(eye, center, up);
 
     // Build rotation matrix from Euler angles (X, Y, Z order)
     double rx = rotation[0] * M_PI / 180.0;
@@ -200,14 +240,14 @@ int main(int argc, char** argv) {
     mat4 rotZ = {{{cz, -sz, 0, 0}, {sz, cz, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}};
     
     mat4 rotationMatrix = rotZ * rotY * rotX;
-    mat4 fullModelView = ModelView * rotationMatrix;
+    ModelView = ModelView * rotationMatrix;
 
     // Rendering loop
     for (int m = 1; m < argc; m++) {
       Model model(argv[m]);
-      RandomShader shader(model, fullModelView);
+      // RandomShader shader(model, fullModelView);
+      PhongShader shader(light_dir, model);
       for (int i = 0; i < model.nfaces(); i++) {
-        shader.color = white;
         Triangle clip = {shader.vertex(i, 0),
                          shader.vertex(i, 1),
                          shader.vertex(i, 2)};
