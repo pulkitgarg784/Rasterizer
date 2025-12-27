@@ -3,9 +3,9 @@
 #include <cstdio>
 #include <iostream>
 
+#include "graphics.h"
 #include "matrix.h"
-#include "model.h"
-#include "tgaimage.h"
+
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_sdlrenderer2.h"
@@ -20,69 +20,31 @@ constexpr TGAColor yellow = {0, 200, 255, 255};
 constexpr int width = 800;
 constexpr int height = 800;
 
-mat4 ModelView, Viewport, Perspective;
+extern mat4 ModelView, Perspective;
+extern std::vector<double> zbuffer;
 
-void lookat(const vec3 eye, const vec3 center, const vec3 up) {
-  vec3 n = normalize(eye - center);
-  vec3 l = normalize(cross(up, n));
-  vec3 m = normalize(cross(n, l));
-  ModelView = mat<4, 4>{{{l.x(), l.y(), l.z(), 0},
-                         {m.x(), m.y(), m.z(), 0},
-                         {n.x(), n.y(), n.z(), 0},
-                         {0, 0, 0, 1}}} *
-              mat<4, 4>{{{1, 0, 0, -center.x()},
-                         {0, 1, 0, -center.y()},
-                         {0, 0, 1, -center.z()},
-                         {0, 0, 0, 1}}};
-}
+struct RandomShader : IShader {
+  const Model &model;
+  const mat4 &modelViewMatrix;
+  TGAColor color = {};
+  vec3 tri[3];
 
-void perspective(const double f) {
-  // Scale x and y by 1/f to maintain constant FOV (90 degrees)
-  // otherwise the object size stays constant on screen (Dolly Zoom effect)
-  double d = (f < 1e-6) ? 1e-6 : f;
-  Perspective = {{{1/d, 0, 0, 0}, {0, 1/d, 0, 0}, {0, 0, 1, 0}, {0, 0, -1 / d, 1}}};
-}
+  RandomShader(const Model &m, const mat4 &mv) : model(m), modelViewMatrix(mv) {}
 
-void viewport(const int x, const int y, const int w, const int h) {
-  Viewport = {{{w / 2., 0, 0, x + w / 2.},
-               {0, h / 2., 0, y + h / 2.},
-               {0, 0, 1, 0},
-               {0, 0, 0, 1}}};
-}
-
-void rasterize(const vec4 clip[3], std::vector<double>& zbuffer,
-               TGAImage& framebuffer, const TGAColor color) {
-  vec4 ndc[3] = {clip[0] / clip[0].w(), clip[1] / clip[1].w(),
-                 clip[2] / clip[2].w()};
-  vec4 s0 = Viewport * ndc[0];
-  vec4 s1 = Viewport * ndc[1];
-  vec4 s2 = Viewport * ndc[2];
-  vec2 screen[3] = {vec2(s0.x(), s0.y()), vec2(s1.x(), s1.y()),
-                    vec2(s2.x(), s2.y())};
-
-  mat<3, 3> ABC = {{{screen[0].x(), screen[0].y(), 1.},
-                    {screen[1].x(), screen[1].y(), 1.},
-                    {screen[2].x(), screen[2].y(), 1.}}};
-  if (ABC.det() < 1) return;
-  auto [bbminx, bbmaxx] =
-      std::minmax({screen[0].x(), screen[1].x(), screen[2].x()});
-  auto [bbminy, bbmaxy] =
-      std::minmax({screen[0].y(), screen[1].y(), screen[2].y()});
-#pragma omp parallel for
-  for (int x = std::max<int>(bbminx, 0);
-       x <= std::min<int>(bbmaxx, framebuffer.width() - 1); x++) {
-    for (int y = std::max<int>(bbminy, 0);
-         y <= std::min<int>(bbmaxy, framebuffer.height() - 1); y++) {
-      vec3 bc = ABC.invert_transpose() *
-                vec3{static_cast<double>(x), static_cast<double>(y), 1.};
-      if (bc.x() < 0 || bc.y() < 0 || bc.z() < 0) continue;
-      double z = dot(bc, vec3(ndc[0].z(), ndc[1].z(), ndc[2].z()));
-      if (z <= zbuffer[x + y * framebuffer.width()]) continue;
-      zbuffer[x + y * framebuffer.width()] = z;
-      framebuffer.set(x, framebuffer.height() - 1 - y, color);
-    }
+  virtual vec4 vertex(const int iface, const int nthvert) {
+    vec3 v = model.vertex(iface, nthvert);
+    vec4 v_pos = modelViewMatrix * vec4{v.x(), v.y(), v.z(), 1.};
+    tri[nthvert] = vec3{v_pos.x(), v_pos.y(), v_pos.z()};
+    return Perspective * v_pos;
   }
-}
+
+  virtual std::pair<bool, TGAColor> fragment(const vec3 bar) const {
+    // TGAColor color;
+    // for (int c = 0; c < 3; c++) color[c] = std::rand() % 255;
+    return {false, color};
+  }
+};
+
 
 int main(int argc, char** argv) {
   if (argc < 2) {
@@ -136,13 +98,15 @@ int main(int argc, char** argv) {
   vec3 center{0, 0, 0};
   vec3 up{0, 1, 0};
 
+  // Model rotation angles (in degrees)
+  float rotation[3] = {0.0f, 0.0f, 0.0f};
+
   lookat(eye, center, up);
-  perspective(norm(eye - center));
-  viewport(width / 16, height / 16, width * 7 / 8, height * 7 / 8);
+  init_perspective(norm(eye - center));
+  init_viewport(width / 16, height / 16, width * 7 / 8, height * 7 / 8);
+  init_zbuffer(width, height);
 
   TGAImage framebuffer(width, height, TGAImage::RGB);
-  std::vector<double> zbuffer(width * height,
-                              -std::numeric_limits<double>::max());
 
   bool end = false;
   SDL_Event event;
@@ -195,7 +159,22 @@ int main(int argc, char** argv) {
 
     if (camera_changed) {
         lookat(eye, center, up);
-        perspective(norm(eye - center));
+        init_perspective(norm(eye - center));
+    }
+
+    // Model rotation sliders
+    ImGui::Separator();
+        float rotation_angle[3] = { (float)rotation[0], (float)rotation[1], (float)rotation[2] };
+        if (ImGui::DragFloat3("Rotation Angle", rotation_angle, 1.0f)) {
+        rotation[0] = rotation_angle[0];
+        rotation[1] = rotation_angle[1];
+        rotation[2] = rotation_angle[2];
+    }
+    // ImGui::SliderFloat("Rotate X", &rotation[0], -180.0f, 180.0f, "%.1f deg");
+    // ImGui::SliderFloat("Rotate Y", &rotation[1], -180.0f, 180.0f, "%.1f deg");
+    // ImGui::SliderFloat("Rotate Z", &rotation[2], -180.0f, 180.0f, "%.1f deg");
+    if (ImGui::Button("Reset Rotation")) {
+        rotation[0] = rotation[1] = rotation[2] = 0.0f;
     }
 
     ImGui::End();
@@ -205,22 +184,34 @@ int main(int argc, char** argv) {
 
     // Clear Buffers
     framebuffer.clear();
-    std::fill(zbuffer.begin(), zbuffer.end(),
-              -std::numeric_limits<double>::max());
+    init_zbuffer(width, height);
+
+    // Build rotation matrix from Euler angles (X, Y, Z order)
+    double rx = rotation[0] * M_PI / 180.0;
+    double ry = rotation[1] * M_PI / 180.0;
+    double rz = rotation[2] * M_PI / 180.0;
+    
+    double cx = cos(rx), sx = sin(rx);
+    double cy = cos(ry), sy = sin(ry);
+    double cz = cos(rz), sz = sin(rz);
+    
+    mat4 rotX = {{{1, 0, 0, 0}, {0, cx, -sx, 0}, {0, sx, cx, 0}, {0, 0, 0, 1}}};
+    mat4 rotY = {{{cy, 0, sy, 0}, {0, 1, 0, 0}, {-sy, 0, cy, 0}, {0, 0, 0, 1}}};
+    mat4 rotZ = {{{cz, -sz, 0, 0}, {sz, cz, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}};
+    
+    mat4 rotationMatrix = rotZ * rotY * rotX;
+    mat4 fullModelView = ModelView * rotationMatrix;
 
     // Rendering loop
     for (int m = 1; m < argc; m++) {
       Model model(argv[m]);
+      RandomShader shader(model, fullModelView);
       for (int i = 0; i < model.nfaces(); i++) {
-        vec4 clip[3];
-        for (int d : {0, 1, 2}) {
-          vec3 v = model.vertex(i, d);
-          clip[d] = Perspective * ModelView * vec4{v.x(), v.y(), v.z(), 1.};
-        }
-        TGAColor color = white;
-        for (int c = 0; c < 3; c++) color[c] = std::rand() % 255;
-
-        rasterize(clip, zbuffer, framebuffer, color);
+        shader.color = white;
+        Triangle clip = {shader.vertex(i, 0),
+                         shader.vertex(i, 1),
+                         shader.vertex(i, 2)};
+        rasterize(clip, shader, framebuffer);
       }
     }
 
