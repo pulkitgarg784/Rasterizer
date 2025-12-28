@@ -26,6 +26,10 @@ int main(int argc, char** argv) {
         renderer.load_mesh(argv[i]);
     }
 
+    RenderObject* obj = renderer.load_mesh("assets/head.obj");
+    obj->mesh.load_texture("assets/african_head_diffuse.tga");
+    obj->mesh.load_normal_map("assets/african_head_nm_tangent.tga");
+
     // UI Callback
     renderer.add_ui_callback([&]() {
         ImGui::Begin("Physics Engine");
