@@ -1,21 +1,18 @@
-//
-// Created by Pulkit Garg on 2025-12-17.
-//
-
-#ifndef RASTERIZER_MODEL_H
-#define RASTERIZER_MODEL_H
+#ifndef RASTERIZER_MESH_H
+#define RASTERIZER_MESH_H
 
 #include <vector>
 
 #include "vec.h"
-class Model {
+class Mesh {
   std::vector<vec3> vertices = {};
   std::vector<int> face_vertices = {};
-  std::vector<vec3> normals = {};    // array of normal vectors
+  std::vector<vec3> normals = {};
   std::vector<int> face_normals = {};
 
  public:
-  Model(const std::string filename);
+  Mesh(const std::string filename);
+  Mesh(std::vector<vec3> verts, std::vector<int> faces, std::vector<vec3> norms, std::vector<int> face_norms);
   int nverts() const;
   int nfaces() const;
   vec3 vertex(const int i) const;
@@ -24,4 +21,4 @@ class Model {
   void normalize();
 };
 
-#endif  // RASTERIZER_MODEL_H
+#endif  // RASTERIZER_MESH_H

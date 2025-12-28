@@ -1,10 +1,13 @@
-#include "model.h"
+#include "mesh.h"
 
 #include <fstream>
 #include <iostream>
 #include <sstream>
 
-Model::Model(const std::string filename) {
+Mesh::Mesh(std::vector<vec3> verts, std::vector<int> faces, std::vector<vec3> norms, std::vector<int> face_norms) 
+    : vertices(verts), face_vertices(faces), normals(norms), face_normals(face_norms) {}
+
+Mesh::Mesh(const std::string filename) {
   std::ifstream in;
   in.open(filename, std::ifstream::in);
   if (in.fail()) return;
@@ -73,7 +76,7 @@ Model::Model(const std::string filename) {
   }
 }
 
-void Model::normalize() {
+void Mesh::normalize() {
   if (vertices.empty()) return;
 
   vec3 min_v = vertices[0];
@@ -103,16 +106,16 @@ void Model::normalize() {
   }
 }
 
-int Model::nverts() const { return vertices.size(); }
+int Mesh::nverts() const { return vertices.size(); }
 
-int Model::nfaces() const { return face_vertices.size() / 3; }
+int Mesh::nfaces() const { return face_vertices.size() / 3; }
 
-vec3 Model::vertex(const int i) const { return vertices[i]; }
+vec3 Mesh::vertex(const int i) const { return vertices[i]; }
 
-vec3 Model::vertex(const int iface, const int nthvertex) const {
+vec3 Mesh::vertex(const int iface, const int nthvertex) const {
   return vertices[face_vertices[iface * 3 + nthvertex]];
 }
 
-vec3 Model::normal(const int iface, const int nthvertex) const {
+vec3 Mesh::normal(const int iface, const int nthvertex) const {
   return normals[face_normals[iface * 3 + nthvertex]];
 }

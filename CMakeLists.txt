@@ -23,7 +23,6 @@ include_directories(imgui/misc/cpp)
 find_package(SDL2 REQUIRED)
 include_directories(${SDL2_INCLUDE_DIRS})
 
-# Hint for OpenMP on macOS (Homebrew)
 if(APPLE)
     if(EXISTS "/opt/homebrew/opt/libomp")
         set(OpenMP_ROOT "/opt/homebrew/opt/libomp")
@@ -38,8 +37,9 @@ find_package(OpenMP)
 # Source files
 set(SOURCES
     src/main.cpp
+    src/renderer.cpp
     src/tgaimage.cpp
-    src/model.cpp
+    src/mesh.cpp
     src/graphics.cpp
     imgui/imgui.cpp
     imgui/imgui_demo.cpp
@@ -56,7 +56,7 @@ add_executable(Rasterizer ${SOURCES})
 # Link SDL2
 target_link_libraries(Rasterizer PUBLIC ${SDL2_LIBRARIES})
 
-# Link OpenMP if found
+# Link OpenMP
 if(OpenMP_CXX_FOUND)
     target_link_libraries(Rasterizer PUBLIC OpenMP::OpenMP_CXX)
 endif()

@@ -1,4 +1,4 @@
-#include "model.h"
+#include "mesh.h"
 #include "tgaimage.h"
 
 void lookat(const vec3 eye, const vec3 center, const vec3 up);

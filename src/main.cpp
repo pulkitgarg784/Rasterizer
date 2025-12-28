@@ -1,313 +1,84 @@
-#include <SDL2/SDL.h>
-
-#include <cstdio>
-#include <iostream>
-
-#include "graphics.h"
-#include "matrix.h"
-
+#include "renderer.h"
 #include "imgui.h"
-#include "imgui_impl_sdl2.h"
-#include "imgui_impl_sdlrenderer2.h"
-#include "imgui_stdlib.h"
+#include <vector>
+#include <cstdlib>
+#include <ctime>
 
-constexpr TGAColor white = {255, 255, 255, 255};
-constexpr TGAColor green = {0, 255, 0, 255};
-constexpr TGAColor red = {0, 0, 255, 255};
-constexpr TGAColor blue = {255, 128, 64, 255};
-constexpr TGAColor yellow = {0, 200, 255, 255};
-
-constexpr int width = 800;
-constexpr int height = 800;
-
-extern mat4 ModelView, Perspective;
-extern mat4 Viewport;
-extern std::vector<double> zbuffer;
-
-void draw_circle(int cx, int cy, int r, TGAColor color, TGAImage &image) {
-  for (int x = -r; x <= r; x++) {
-    for (int y = -r; y <= r; y++) {
-      if (x * x + y * y <= r * r) {
-        image.set(cx + x, cy + y, color);
-      }
-    }
-  }
-}
-
-/* struct RandomShader : IShader {
-  const Model &model;
-  const mat4 &modelViewMatrix;
-  TGAColor color = {};
-  vec3 tri[3];
-
-  RandomShader(const Model &m, const mat4 &mv) : model(m), modelViewMatrix(mv) {}
-
-  virtual vec4 vertex(const int iface, const int nthvert) {
-    vec3 v = model.vertex(iface, nthvert);
-    vec4 v_pos = modelViewMatrix * vec4{v.x(), v.y(), v.z(), 1.};
-    tri[nthvert] = vec3{v_pos.x(), v_pos.y(), v_pos.z()};
-    return Perspective * v_pos;
-  }
-
-  virtual std::pair<bool, TGAColor> fragment(const vec3 bar) const {
-    TGAColor color;
-    for (int c = 0; c < 3; c++) color[c] = std::rand() % 255;
-    return {false, color};
-  }
-}; */
-
-struct PhongShader : IShader {
-    const Model &model;
-    vec3 l; // light direction
-    vec3 tri[3];
-    vec3 nrmls[3];
-
-  PhongShader(const vec3 light, const Model& m) : model(m) {
-    vec4 light_transformed =
-        ModelView * vec4{light.x(), light.y(), light.z(), 0.};
-        l = normalize(light_transformed.xyz());
-    }
-
-    virtual vec4 vertex(const int face, const int vert) {
-        vec3 v = model.vertex(face, vert);
-        vec3 n = model.normal(face, vert);
-        nrmls[vert] = (ModelView.invert_transpose() * vec4{n.x(), n.y(), n.z(), 0.}).xyz();
-        vec4 gl_Position = ModelView * vec4{v.x(), v.y(), v.z(), 1.};
-        tri[vert] = gl_Position.xyz();
-        return Perspective * gl_Position;
-    }
-
-    virtual std::pair<bool,TGAColor> fragment(const vec3 bar) const {
-        TGAColor gl_FragColor = {255, 255, 255, 255};
-        // vec3 n = normalize(cross(tri[1]-tri[0], tri[2]-tri[0])); // normal vector (flat shading)
-        vec3 n = normalize(nrmls[0]*bar[0] + nrmls[1]*bar[1] + nrmls[2]*bar[2]); // normal vector (smooth shading)
-        vec3 r = normalize(n * (dot(n, l) * 2.0) - l); // relflection vector
-        double ambient = .3;
-        double diff = std::max(0., dot(n, l));
-        double spec = std::pow(std::max(r.z(), 0.), 35);
-        for (int channel : {0,1,2})
-            gl_FragColor[channel] *= std::min(1., ambient + .4*diff + .9*spec);
-        return {false, gl_FragColor};
-    }
+struct PhysicsObject {
+    RenderObject* render_obj;
+    vec3 velocity;
+    float radius;
+    
+    PhysicsObject(RenderObject* obj, vec3 vel, float r) 
+        : render_obj(obj), velocity(vel), radius(r) {}
 };
 
-
 int main(int argc, char** argv) {
-  if (argc < 2) {
-    std::cerr << "Usage: " << argv[0] << " obj/model.obj" << std::endl;
-    return 1;
-  }
+    std::srand(std::time(nullptr));
+    
+    Renderer renderer(800, 800);
+    if (!renderer.init()) return 1;
 
-  if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-    std::cerr << "Could not init SDL: " << SDL_GetError() << std::endl;
-    return 1;
-  }
-
-  constexpr int width = 800;
-  constexpr int height = 800;
-
-  SDL_Window* window =
-      SDL_CreateWindow("Renderer", 100, 100, width, height, SDL_WINDOW_SHOWN);
-  if (!window) {
-    std::cerr << "Could not create SDL window: " << SDL_GetError() << std::endl;
-    SDL_Quit();
-    return 1;
-  }
-  SDL_Renderer* renderer = SDL_CreateRenderer(
-      window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-  if (!renderer) {
-    SDL_DestroyWindow(window);
-    std::cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
-    SDL_Quit();
-    return 1;
-  }
-
-  // Setup ImGui context
-  IMGUI_CHECKVERSION();
-  ImGui::CreateContext();
-  ImGuiIO& io = ImGui::GetIO(); (void)io;
-  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-  io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-
-  // Setup Dear ImGui style
-  ImGui::StyleColorsDark();
-
-  // Setup Platform/Renderer backends
-  ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
-  ImGui_ImplSDLRenderer2_Init(renderer);
-
-  SDL_Texture* texture =
-      SDL_CreateTexture(renderer, SDL_PIXELFORMAT_BGR24,
-                        SDL_TEXTUREACCESS_STREAMING, width, height);
-
-  vec3 eye{-1, 0, 2};
-  vec3 center{0, 0, 0};
-  vec3 up{0, 1, 0};
-  vec3 light_dir{1, 1, 1};
-
-  // Model rotation angles (in degrees)
-  // float rotation[3] = {0.0f, 0.0f, 0.0f};
-
-  lookat(eye, center, up);
-  init_perspective(norm(eye - center));
-  init_viewport(width / 16, height / 16, width * 7 / 8, height * 7 / 8);
-  init_zbuffer(width, height);
-
-  TGAImage framebuffer(width, height, TGAImage::RGB);
-
-  bool end = false;
-  SDL_Event event;
-  
-  Uint32 frameCount = 0;
-  Uint32 lastTime = SDL_GetTicks();
-
-  while (!end) {
-    // Handle Events
-    while (SDL_PollEvent(&event)) {
-      ImGui_ImplSDL2_ProcessEvent(&event);
-      if (event.type == SDL_QUIT || event.type == SDL_KEYDOWN && 
-          event.key.keysym.sym == SDLK_ESCAPE) {
-        end = true;
-      }
+    std::vector<PhysicsObject> physics_objects;
+    
+    // Load any obj files passed as command line arguments
+    for (int i = 1; i < argc; i++) {
+        renderer.load_mesh(argv[i]);
     }
 
-    // Start the Dear ImGui frame
-    ImGui_ImplSDLRenderer2_NewFrame();
-    ImGui_ImplSDL2_NewFrame();
-    ImGui::NewFrame();
-
-    ImGui::Begin("Debug Info");
-    ImGui::Text("FPS: %.1f FPS (%.3f ms/frame)", io.Framerate, 1000.0f / io.Framerate);
-
-    static bool lock_target = true;
-    ImGui::Checkbox("Lock Target (Strafe)", &lock_target);
-
-    bool camera_changed = false;
-    float eye_pos[3] = { (float)eye[0], (float)eye[1], (float)eye[2] };
-    if (ImGui::DragFloat3("Camera Position", eye_pos, 0.1f)) {
-        if (lock_target) {
-            center[0] += eye_pos[0] - eye[0];
-            center[1] += eye_pos[1] - eye[1];
-            center[2] += eye_pos[2] - eye[2];
+    // UI Callback
+    renderer.add_ui_callback([&]() {
+        ImGui::Begin("Physics Engine");
+        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        
+        ImGui::Checkbox("Enable Physics", &renderer.physics_enabled);
+        
+        if (ImGui::Button("Add Sphere")) {
+            TGAColor color = {static_cast<uint8_t>(std::rand() % 256), 
+                              static_cast<uint8_t>(std::rand() % 256), 
+                              static_cast<uint8_t>(std::rand() % 256), 255};
+            
+            float radius = 0.2f;
+            vec3 pos = {(std::rand() / (float)RAND_MAX) * 2.0f - 1.0f,
+                        (std::rand() / (float)RAND_MAX) * 2.0f + 2.0f,
+                        (std::rand() / (float)RAND_MAX) * 2.0f - 1.0f};
+            
+            RenderObject* ro = renderer.create_sphere(radius, color);
+            ro->position = pos;
+            
+            vec3 vel = {(std::rand() / (float)RAND_MAX) * 2.0f - 1.0f,
+                        0.0f,
+                        (std::rand() / (float)RAND_MAX) * 2.0f - 1.0f};
+            
+            physics_objects.emplace_back(ro, vel, radius);
         }
-        eye[0] = eye_pos[0];
-        eye[1] = eye_pos[1];
-        eye[2] = eye_pos[2];
-        camera_changed = true;
-    }
-    
-    float center_pos[3] = { (float)center[0], (float)center[1], (float)center[2] };
-    if (ImGui::DragFloat3("Camera Target", center_pos, 0.1f)) {
-        center[0] = center_pos[0];
-        center[1] = center_pos[1];
-        center[2] = center_pos[2];
-        camera_changed = true;
-    }
+        
+        ImGui::End();
+    });
 
-    if (camera_changed) {
-        lookat(eye, center, up);
-        init_perspective(norm(eye - center));
-    }
-
-    // // Model rotation sliders
-    // ImGui::Separator();
-    //     float rotation_angle[3] = { (float)rotation[0], (float)rotation[1], (float)rotation[2] };
-    //     if (ImGui::DragFloat3("Rotation Angle", rotation_angle, 1.0f)) {
-    //     rotation[0] = rotation_angle[0];
-    //     rotation[1] = rotation_angle[1];
-    //     rotation[2] = rotation_angle[2];
-    // }
-
-    // if (ImGui::Button("Reset Rotation")) {
-    //     rotation[0] = rotation[1] = rotation[2] = 0.0f;
-    // }
-
-    ImGui::Separator();
-    float light_pos[3] = { (float)light_dir[0], (float)light_dir[1], (float)light_dir[2] };
-    if (ImGui::DragFloat3("Light Direction", light_pos, 0.1f)) {
-        light_dir[0] = light_pos[0];
-        light_dir[1] = light_pos[1];
-        light_dir[2] = light_pos[2];
+    while (renderer.process_events()) {
+        float dt = renderer.get_delta_time();
+        
+        if (renderer.physics_enabled) {
+            for (auto& obj : physics_objects) {
+                // Gravity
+                obj.velocity[1] -= 9.8f * dt;
+                
+                // Update position
+                obj.render_obj->position[0] += obj.velocity[0] * dt;
+                obj.render_obj->position[1] += obj.velocity[1] * dt;
+                obj.render_obj->position[2] += obj.velocity[2] * dt;
+                
+                // Floor collision
+                if (obj.render_obj->position[1] < -1.0f + obj.radius) {
+                    obj.render_obj->position[1] = -1.0f + obj.radius;
+                    obj.velocity[1] *= -0.8f; // Damping
+                }
+            }
+        }
+        
+        renderer.render();
     }
 
-    ImGui::End();
-
-    // Rendering
-    ImGui::Render();
-
-    // Clear Buffers
-    framebuffer.clear();
-    init_zbuffer(width, height);
-    lookat(eye, center, up);
-    mat4 View = ModelView;
-
-    // // Build rotation matrix
-    // double rx = rotation[0] * M_PI / 180.0;
-    // double ry = rotation[1] * M_PI / 180.0;
-    // double rz = rotation[2] * M_PI / 180.0;
-    
-    // double cx = cos(rx), sx = sin(rx);
-    // double cy = cos(ry), sy = sin(ry);
-    // double cz = cos(rz), sz = sin(rz);
-    
-    // mat4 rotX = {{{1, 0, 0, 0}, {0, cx, -sx, 0}, {0, sx, cx, 0}, {0, 0, 0, 1}}};
-    // mat4 rotY = {{{cy, 0, sy, 0}, {0, 1, 0, 0}, {-sy, 0, cy, 0}, {0, 0, 0, 1}}};
-    // mat4 rotZ = {{{cz, -sz, 0, 0}, {sz, cz, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}};
-    
-    // mat4 rotationMatrix = rotZ * rotY * rotX;
-    // ModelView = ModelView * rotationMatrix;
-
-    // Rendering loop
-    for (int m = 1; m < argc; m++) {
-      Model model(argv[m]);
-      model.normalize();
-      // RandomShader shader(model, fullModelView);
-      PhongShader shader(light_dir, model);
-      for (int i = 0; i < model.nfaces(); i++) {
-        Triangle clip = {shader.vertex(i, 0),
-                         shader.vertex(i, 1),
-                         shader.vertex(i, 2)};
-        rasterize(clip, shader, framebuffer);
-      }
-    }
-
-    // Draw light source
-    {
-      vec4 light_pos_world = {light_dir[0], light_dir[1], light_dir[2], 1.0};
-      vec4 light_pos_view = View * light_pos_world;
-      vec4 light_pos_clip = Perspective * light_pos_view;
-
-      if (light_pos_clip[3] > 0) {
-        vec3 ndc = {light_pos_clip[0] / light_pos_clip[3],
-                    light_pos_clip[1] / light_pos_clip[3],
-                    light_pos_clip[2] / light_pos_clip[3]};
-
-        vec4 ndc4 = {ndc.x(), ndc.y(), ndc.z(), 1.0};
-        vec4 screen_pos = Viewport * ndc4;
-        draw_circle((int)screen_pos.x(), framebuffer.height() - 1 - (int)screen_pos.y(), 10, yellow,
-                    framebuffer);
-      }
-    }
-
-    // Update Screen
-    SDL_UpdateTexture(texture, nullptr, framebuffer.buffer(), width * 3);
-
-    SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, texture, nullptr, nullptr);
-    ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData(), renderer);
-    SDL_RenderPresent(renderer);
-  
-  }
-
-  // Cleanup
-  ImGui_ImplSDLRenderer2_Shutdown();
-  ImGui_ImplSDL2_Shutdown();
-  ImGui::DestroyContext();
-
-  SDL_DestroyTexture(texture);
-  SDL_DestroyRenderer(renderer);
-  SDL_DestroyWindow(window);
-  SDL_Quit();
-
-  return 0;
+    return 0;
 }
