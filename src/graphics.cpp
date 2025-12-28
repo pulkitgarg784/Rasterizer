@@ -104,7 +104,11 @@ void rasterize(const Triangle& clip, const IShader& shader,
           if (bc.x() < 0 || bc.y() < 0 || bc.z() < 0) continue;
           double z = dot(bc, vec3(ndc[0].z(), ndc[1].z(), ndc[2].z()));
           if (z <= zbuffer[x + y * framebuffer.width()]) continue;
-          auto [discard, color] = shader.fragment(bc);
+
+          vec3 bc_clip = {bc.x() / clip[0].w(), bc.y() / clip[1].w(), bc.z() / clip[2].w()};
+          bc_clip = bc_clip / (bc_clip.x() + bc_clip.y() + bc_clip.z());
+
+          auto [discard, color] = shader.fragment(bc_clip);
           if (discard) continue;
           zbuffer[x + y * framebuffer.width()] = z;
           framebuffer.set(x, framebuffer.height() - 1 - y, color);
