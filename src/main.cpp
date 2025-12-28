@@ -21,7 +21,18 @@ constexpr int width = 800;
 constexpr int height = 800;
 
 extern mat4 ModelView, Perspective;
+extern mat4 Viewport;
 extern std::vector<double> zbuffer;
+
+void draw_circle(int cx, int cy, int r, TGAColor color, TGAImage &image) {
+  for (int x = -r; x <= r; x++) {
+    for (int y = -r; y <= r; y++) {
+      if (x * x + y * y <= r * r) {
+        image.set(cx + x, cy + y, color);
+      }
+    }
+  }
+}
 
 struct RandomShader : IShader {
   const Model &model;
@@ -50,8 +61,9 @@ struct PhongShader : IShader {
     vec3 l; // light direction
     vec3 tri[3];
 
-    PhongShader(const vec3 light, const Model &m) : model(m) {
-        vec4 light_transformed = ModelView*vec4{light.x(), light.y(), light.z(), 0.};
+  PhongShader(const vec3 light, const Model& m, const mat4& view) : model(m) {
+    vec4 light_transformed =
+        view * vec4{light.x(), light.y(), light.z(), 0.};
         l = normalize(vec3{light_transformed.x(), light_transformed.y(), light_transformed.z()});
     }
 
@@ -163,7 +175,7 @@ int main(int argc, char** argv) {
     ImGui::Begin("Debug Info");
     ImGui::Text("FPS: %.1f FPS (%.3f ms/frame)", io.Framerate, 1000.0f / io.Framerate);
 
-    static bool lock_target = false;
+    static bool lock_target = true;
     ImGui::Checkbox("Lock Target (Strafe)", &lock_target);
 
     bool camera_changed = false;
@@ -225,8 +237,9 @@ int main(int argc, char** argv) {
     framebuffer.clear();
     init_zbuffer(width, height);
     lookat(eye, center, up);
+    mat4 View = ModelView;
 
-    // Build rotation matrix from Euler angles (X, Y, Z order)
+    // Build rotation matrix
     double rx = rotation[0] * M_PI / 180.0;
     double ry = rotation[1] * M_PI / 180.0;
     double rz = rotation[2] * M_PI / 180.0;
@@ -245,13 +258,32 @@ int main(int argc, char** argv) {
     // Rendering loop
     for (int m = 1; m < argc; m++) {
       Model model(argv[m]);
+      model.normalize();
       // RandomShader shader(model, fullModelView);
-      PhongShader shader(light_dir, model);
+      PhongShader shader(light_dir, model, View);
       for (int i = 0; i < model.nfaces(); i++) {
         Triangle clip = {shader.vertex(i, 0),
                          shader.vertex(i, 1),
                          shader.vertex(i, 2)};
         rasterize(clip, shader, framebuffer);
+      }
+    }
+
+    // Draw light source
+    {
+      vec4 light_pos_world = {light_dir[0], light_dir[1], light_dir[2], 1.0};
+      vec4 light_pos_view = View * light_pos_world;
+      vec4 light_pos_clip = Perspective * light_pos_view;
+
+      if (light_pos_clip[3] > 0) {
+        vec3 ndc = {light_pos_clip[0] / light_pos_clip[3],
+                    light_pos_clip[1] / light_pos_clip[3],
+                    light_pos_clip[2] / light_pos_clip[3]};
+
+        vec4 ndc4 = {ndc.x(), ndc.y(), ndc.z(), 1.0};
+        vec4 screen_pos = Viewport * ndc4;
+        draw_circle((int)screen_pos.x(), framebuffer.height() - 1 - (int)screen_pos.y(), 10, yellow,
+                    framebuffer);
       }
     }
 

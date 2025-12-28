@@ -47,7 +47,6 @@ Model::Model(const std::string filename) {
       }
     }
   }
-  std::cerr << "# v# " << nverts() << " f# " << nfaces() << std::endl;
 }
 
 void Model::normalize() {
