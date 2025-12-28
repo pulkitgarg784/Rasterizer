@@ -38,6 +38,10 @@ public:
     void set_camera(vec3 eye, vec3 center, vec3 up);
     void set_light_dir(vec3 dir);
 
+    // Lighting
+    vec3 light_dir;
+    float light_intensity = 1.0f;
+
     // Debug UI
     bool physics_enabled = true;
     void add_ui_callback(std::function<void()> callback);
@@ -52,7 +56,7 @@ private:
     
     std::vector<RenderObject*> objects;
     
-    vec3 eye, center, up, light_dir;
+    vec3 eye, center, up;
     
     Uint32 last_time = 0;
     float dt = 0.0f;

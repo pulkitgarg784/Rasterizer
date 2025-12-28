@@ -74,9 +74,10 @@ struct PhongShader : IShader {
     mat<3,3> varying_tri;
     bool is_point;
     TGAColor color;
+    float intensity;
 
-  PhongShader(const vec3 light, const Mesh& m, const mat4& View, bool point_light = false, TGAColor c = {255, 255, 255, 255}) 
-      : mesh(m), is_point(point_light), color(c) {
+  PhongShader(const vec3 light, float intens, const Mesh& m, const mat4& View, bool point_light = false, TGAColor c = {255, 255, 255, 255}) 
+      : mesh(m), is_point(point_light), color(c), intensity(intens) {
     if (is_point) {
         vec4 light_transformed = View * vec4{light.x(), light.y(), light.z(), 1.};
         l = light_transformed.xyz();
@@ -134,7 +135,7 @@ struct PhongShader : IShader {
         double diff = std::max(0., dot(n, light_dir_vec));
         double spec = std::pow(std::max(r.z(), 0.), 35);
         for (int channel : {0,1,2})
-            gl_FragColor[channel] *= std::min(1., ambient + .4*diff + .9*spec);
+            gl_FragColor[channel] *= std::min(1., (ambient + .4*diff + .9*spec) * intensity);
         return {false, gl_FragColor};
     }
 };
@@ -275,7 +276,7 @@ void Renderer::render() {
         
         #pragma omp parallel for
         for (int i = 0; i < obj->mesh.nfaces(); i++) {
-            PhongShader shader(light_dir, obj->mesh, View, true, obj->color);
+            PhongShader shader(light_dir, light_intensity, obj->mesh, View, true, obj->color);
             Triangle clip = {shader.vertex(i, 0),
                              shader.vertex(i, 1),
                              shader.vertex(i, 2)};

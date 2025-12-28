@@ -69,6 +69,18 @@ int main(int argc, char** argv) {
         ImGui::Checkbox("Enable Physics", &renderer.physics_enabled);
 
         ImGui::Separator();
+        ImGui::Text("Lighting");
+        
+        float l_pos[3] = { (float)renderer.light_dir[0], (float)renderer.light_dir[1], (float)renderer.light_dir[2] };
+        if (ImGui::DragFloat3("Light Position", l_pos, 0.1f)) {
+            renderer.light_dir[0] = l_pos[0];
+            renderer.light_dir[1] = l_pos[1];
+            renderer.light_dir[2] = l_pos[2];
+        }
+        
+        ImGui::SliderFloat("Intensity", &renderer.light_intensity, 0.0f, 5.0f);
+
+        ImGui::Separator();
         ImGui::Text("Mesh Selection");
         
         if (!mesh_files.empty()) {
