@@ -3,6 +3,24 @@
 #include <vector>
 #include <cstdlib>
 #include <ctime>
+#include <filesystem>
+#include <string>
+#include <algorithm>
+
+namespace fs = std::filesystem;
+
+std::vector<std::string> get_files(const std::string& path, const std::string& ext) {
+    std::vector<std::string> files;
+    if (fs::exists(path) && fs::is_directory(path)) {
+        for (const auto& entry : fs::directory_iterator(path)) {
+            if (entry.path().extension() == ext) {
+                files.push_back(entry.path().filename().string());
+            }
+        }
+    }
+    std::sort(files.begin(), files.end());
+    return files;
+}
 
 struct PhysicsObject {
     RenderObject* render_obj;
@@ -26,6 +44,19 @@ int main(int argc, char** argv) {
         renderer.load_mesh(argv[i]);
     }
 
+    auto mesh_files = get_files("assets", ".obj");
+    auto texture_files = get_files("assets", ".tga");
+    
+    // Helper to find index
+    auto find_index = [](const std::vector<std::string>& files, const std::string& name) {
+        auto it = std::find(files.begin(), files.end(), name);
+        return (it != files.end()) ? std::distance(files.begin(), it) : 0;
+    };
+
+    int current_mesh_idx = find_index(mesh_files, "head.obj");
+    int current_diffuse_idx = find_index(texture_files, "african_head_diffuse.tga");
+    int current_nm_idx = find_index(texture_files, "african_head_nm_tangent.tga");
+
     RenderObject* obj = renderer.load_mesh("assets/head.obj");
     obj->mesh.load_texture("assets/african_head_diffuse.tga");
     obj->mesh.load_normal_map("assets/african_head_nm_tangent.tga");
@@ -36,6 +67,54 @@ int main(int argc, char** argv) {
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         
         ImGui::Checkbox("Enable Physics", &renderer.physics_enabled);
+
+        ImGui::Separator();
+        ImGui::Text("Mesh Selection");
+        
+        if (!mesh_files.empty()) {
+            if (ImGui::BeginCombo("Mesh", mesh_files[current_mesh_idx].c_str())) {
+                for (int n = 0; n < mesh_files.size(); n++) {
+                    bool is_selected = (current_mesh_idx == n);
+                    if (ImGui::Selectable(mesh_files[n].c_str(), is_selected)) {
+                        current_mesh_idx = n;
+                        obj->mesh = Mesh("assets/" + mesh_files[current_mesh_idx]);
+                        // Re-apply textures
+                        if (!texture_files.empty()) {
+                             obj->mesh.load_texture("assets/" + texture_files[current_diffuse_idx]);
+                             obj->mesh.load_normal_map("assets/" + texture_files[current_nm_idx]);
+                        }
+                    }
+                    if (is_selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+        }
+
+        if (!texture_files.empty()) {
+            if (ImGui::BeginCombo("Diffuse Texture", texture_files[current_diffuse_idx].c_str())) {
+                for (int n = 0; n < texture_files.size(); n++) {
+                    bool is_selected = (current_diffuse_idx == n);
+                    if (ImGui::Selectable(texture_files[n].c_str(), is_selected)) {
+                        current_diffuse_idx = n;
+                        obj->mesh.load_texture("assets/" + texture_files[current_diffuse_idx]);
+                    }
+                    if (is_selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
+            if (ImGui::BeginCombo("Normal Map", texture_files[current_nm_idx].c_str())) {
+                for (int n = 0; n < texture_files.size(); n++) {
+                    bool is_selected = (current_nm_idx == n);
+                    if (ImGui::Selectable(texture_files[n].c_str(), is_selected)) {
+                        current_nm_idx = n;
+                        obj->mesh.load_normal_map("assets/" + texture_files[current_nm_idx]);
+                    }
+                    if (is_selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+        }
         
         if (ImGui::Button("Add Sphere")) {
             TGAColor color = {static_cast<uint8_t>(std::rand() % 256), 
