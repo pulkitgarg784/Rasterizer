@@ -10,7 +10,7 @@ endif()
 
 # Add optimization flags
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -flto")
 endif()
 
 # Include headers

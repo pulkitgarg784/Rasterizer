@@ -6,7 +6,7 @@
 #include "imgui_impl_sdlrenderer2.h"
 
 extern mat4 ModelView, Perspective, Viewport;
-extern std::vector<double> zbuffer;
+extern std::vector<float> zbuffer;
 
 Mesh create_sphere_model(float radius, int rings, int sectors) {
     std::vector<vec3> vertices;
@@ -239,8 +239,9 @@ void Renderer::render() {
         
         ModelView = View * Translation;
         
-        PhongShader shader(light_dir, obj->mesh, View, true, obj->color);
+        #pragma omp parallel for
         for (int i = 0; i < obj->mesh.nfaces(); i++) {
+            PhongShader shader(light_dir, obj->mesh, View, true, obj->color);
             Triangle clip = {shader.vertex(i, 0),
                              shader.vertex(i, 1),
                              shader.vertex(i, 2)};
