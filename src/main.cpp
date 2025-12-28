@@ -34,7 +34,7 @@ void draw_circle(int cx, int cy, int r, TGAColor color, TGAImage &image) {
   }
 }
 
-struct RandomShader : IShader {
+/* struct RandomShader : IShader {
   const Model &model;
   const mat4 &modelViewMatrix;
   TGAColor color = {};
@@ -54,36 +54,40 @@ struct RandomShader : IShader {
     for (int c = 0; c < 3; c++) color[c] = std::rand() % 255;
     return {false, color};
   }
-};
+}; */
 
 struct PhongShader : IShader {
     const Model &model;
     vec3 l; // light direction
     vec3 tri[3];
+    vec3 nrmls[3];
 
-  PhongShader(const vec3 light, const Model& m, const mat4& view) : model(m) {
+  PhongShader(const vec3 light, const Model& m) : model(m) {
     vec4 light_transformed =
-        view * vec4{light.x(), light.y(), light.z(), 0.};
-        l = normalize(vec3{light_transformed.x(), light_transformed.y(), light_transformed.z()});
+        ModelView * vec4{light.x(), light.y(), light.z(), 0.};
+        l = normalize(light_transformed.xyz());
     }
 
     virtual vec4 vertex(const int face, const int vert) {
-        vec3 v = model.vertex(face, vert);                          // current vertex in object coordinates
+        vec3 v = model.vertex(face, vert);
+        vec3 n = model.normal(face, vert);
+        nrmls[vert] = (ModelView.invert_transpose() * vec4{n.x(), n.y(), n.z(), 0.}).xyz();
         vec4 gl_Position = ModelView * vec4{v.x(), v.y(), v.z(), 1.};
-        tri[vert] = vec3{gl_Position.x(), gl_Position.y(), gl_Position.z()};                            // in eye coordinates
-        return Perspective * gl_Position;                         // in clip coordinates
+        tri[vert] = gl_Position.xyz();
+        return Perspective * gl_Position;
     }
 
     virtual std::pair<bool,TGAColor> fragment(const vec3 bar) const {
-        TGAColor gl_FragColor = {255, 255, 255, 255};             // output color of the fragment
-        vec3 n = normalize(cross(tri[1]-tri[0], tri[2]-tri[0])); // triangle normal in eye coordinates
-        vec3 r = normalize(n * (dot(n, l) * 2.0) - l);           // reflected light direction
-        double ambient = .3;                                      // ambient light intensity
-        double diff = std::max(0., dot(n, l));                    // diffuse light intensity
-        double spec = std::pow(std::max(r.z(), 0.), 35);          // specular intensity, note that the camera lies on the z-axis (in eye coordinates), therefore simple r.z, since (0,0,1)*(r.x, r.y, r.z) = r.z
+        TGAColor gl_FragColor = {255, 255, 255, 255};
+        // vec3 n = normalize(cross(tri[1]-tri[0], tri[2]-tri[0])); // normal vector (flat shading)
+        vec3 n = normalize(nrmls[0]*bar[0] + nrmls[1]*bar[1] + nrmls[2]*bar[2]); // normal vector (smooth shading)
+        vec3 r = normalize(n * (dot(n, l) * 2.0) - l); // relflection vector
+        double ambient = .3;
+        double diff = std::max(0., dot(n, l));
+        double spec = std::pow(std::max(r.z(), 0.), 35);
         for (int channel : {0,1,2})
             gl_FragColor[channel] *= std::min(1., ambient + .4*diff + .9*spec);
-        return {false, gl_FragColor};                             // do not discard the pixel
+        return {false, gl_FragColor};
     }
 };
 
@@ -142,7 +146,7 @@ int main(int argc, char** argv) {
   vec3 light_dir{1, 1, 1};
 
   // Model rotation angles (in degrees)
-  float rotation[3] = {0.0f, 0.0f, 0.0f};
+  // float rotation[3] = {0.0f, 0.0f, 0.0f};
 
   lookat(eye, center, up);
   init_perspective(norm(eye - center));
@@ -205,20 +209,18 @@ int main(int argc, char** argv) {
         init_perspective(norm(eye - center));
     }
 
-    // Model rotation sliders
-    ImGui::Separator();
-        float rotation_angle[3] = { (float)rotation[0], (float)rotation[1], (float)rotation[2] };
-        if (ImGui::DragFloat3("Rotation Angle", rotation_angle, 1.0f)) {
-        rotation[0] = rotation_angle[0];
-        rotation[1] = rotation_angle[1];
-        rotation[2] = rotation_angle[2];
-    }
-    // ImGui::SliderFloat("Rotate X", &rotation[0], -180.0f, 180.0f, "%.1f deg");
-    // ImGui::SliderFloat("Rotate Y", &rotation[1], -180.0f, 180.0f, "%.1f deg");
-    // ImGui::SliderFloat("Rotate Z", &rotation[2], -180.0f, 180.0f, "%.1f deg");
-    if (ImGui::Button("Reset Rotation")) {
-        rotation[0] = rotation[1] = rotation[2] = 0.0f;
-    }
+    // // Model rotation sliders
+    // ImGui::Separator();
+    //     float rotation_angle[3] = { (float)rotation[0], (float)rotation[1], (float)rotation[2] };
+    //     if (ImGui::DragFloat3("Rotation Angle", rotation_angle, 1.0f)) {
+    //     rotation[0] = rotation_angle[0];
+    //     rotation[1] = rotation_angle[1];
+    //     rotation[2] = rotation_angle[2];
+    // }
+
+    // if (ImGui::Button("Reset Rotation")) {
+    //     rotation[0] = rotation[1] = rotation[2] = 0.0f;
+    // }
 
     ImGui::Separator();
     float light_pos[3] = { (float)light_dir[0], (float)light_dir[1], (float)light_dir[2] };
@@ -239,28 +241,28 @@ int main(int argc, char** argv) {
     lookat(eye, center, up);
     mat4 View = ModelView;
 
-    // Build rotation matrix
-    double rx = rotation[0] * M_PI / 180.0;
-    double ry = rotation[1] * M_PI / 180.0;
-    double rz = rotation[2] * M_PI / 180.0;
+    // // Build rotation matrix
+    // double rx = rotation[0] * M_PI / 180.0;
+    // double ry = rotation[1] * M_PI / 180.0;
+    // double rz = rotation[2] * M_PI / 180.0;
     
-    double cx = cos(rx), sx = sin(rx);
-    double cy = cos(ry), sy = sin(ry);
-    double cz = cos(rz), sz = sin(rz);
+    // double cx = cos(rx), sx = sin(rx);
+    // double cy = cos(ry), sy = sin(ry);
+    // double cz = cos(rz), sz = sin(rz);
     
-    mat4 rotX = {{{1, 0, 0, 0}, {0, cx, -sx, 0}, {0, sx, cx, 0}, {0, 0, 0, 1}}};
-    mat4 rotY = {{{cy, 0, sy, 0}, {0, 1, 0, 0}, {-sy, 0, cy, 0}, {0, 0, 0, 1}}};
-    mat4 rotZ = {{{cz, -sz, 0, 0}, {sz, cz, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}};
+    // mat4 rotX = {{{1, 0, 0, 0}, {0, cx, -sx, 0}, {0, sx, cx, 0}, {0, 0, 0, 1}}};
+    // mat4 rotY = {{{cy, 0, sy, 0}, {0, 1, 0, 0}, {-sy, 0, cy, 0}, {0, 0, 0, 1}}};
+    // mat4 rotZ = {{{cz, -sz, 0, 0}, {sz, cz, 0, 0}, {0, 0, 1, 0}, {0, 0, 0, 1}}};
     
-    mat4 rotationMatrix = rotZ * rotY * rotX;
-    ModelView = ModelView * rotationMatrix;
+    // mat4 rotationMatrix = rotZ * rotY * rotX;
+    // ModelView = ModelView * rotationMatrix;
 
     // Rendering loop
     for (int m = 1; m < argc; m++) {
       Model model(argv[m]);
       model.normalize();
       // RandomShader shader(model, fullModelView);
-      PhongShader shader(light_dir, model, View);
+      PhongShader shader(light_dir, model);
       for (int i = 0; i < model.nfaces(); i++) {
         Triangle clip = {shader.vertex(i, 0),
                          shader.vertex(i, 1),

@@ -11,6 +11,8 @@
 class Model {
   std::vector<vec3> vertices = {};
   std::vector<int> face_vertices = {};
+  std::vector<vec3> normals = {};    // array of normal vectors
+  std::vector<int> face_normals = {};
 
  public:
   Model(const std::string filename);
@@ -18,7 +20,7 @@ class Model {
   int nfaces() const;
   vec3 vertex(const int i) const;
   vec3 vertex(const int iface, const int nthvertex) const;
-
+  vec3 normal(const int iface, const int nthvertex) const;
   void normalize();
 };
 

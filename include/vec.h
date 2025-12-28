@@ -37,6 +37,11 @@ struct vec {
     return data[3];
   }
 
+  vec<3> xyz() {
+    static_assert(N >= 3, "xyz() is only available for N >= 3");
+    return vec<3>{data[0], data[1], data[2]};
+  }
+
   vec<N> operator+(const vec<N>& v) const {
     vec<N> result;
     for (int i = 0; i < N; ++i) result[i] = data[i] + v[i];
