@@ -39,10 +39,11 @@ int main(int argc, char** argv) {
 
     std::vector<PhysicsObject> physics_objects;
     
-    // Load any obj files passed as command line arguments
-    for (int i = 1; i < argc; i++) {
-        renderer.load_mesh(argv[i]);
-    }
+    // Load floor
+    RenderObject* floor = renderer.load_mesh("assets/floor.obj");
+    floor->mesh.load_texture("assets/floor_diffuse.tga");
+    floor->mesh.load_normal_map("assets/floor_nm_tangent.tga");
+    floor->position = {0, -1.0f, 0};
 
     auto mesh_files = get_files("assets", ".obj");
     auto texture_files = get_files("assets", ".tga");
