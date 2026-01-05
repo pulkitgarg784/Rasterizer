@@ -14,8 +14,10 @@ class Mesh {
   std::vector<int> face_uvs = {};
   TGAImage diffuse_map = {};
   TGAImage normal_map = {};
+  TGAImage specular_map = {};
   bool has_texture = false;
   bool has_normal_map = false;
+  bool has_specular_map = false;
 
  public:
   Mesh(const std::string filename);
@@ -30,9 +32,12 @@ class Mesh {
   
   void load_texture(const std::string filename);
   void load_normal_map(const std::string filename);
+  void load_specular_map(const std::string filename);
   TGAColor diffuse(vec2 uv) const;
+  float specular(vec2 uv) const;
   vec3 normal(vec2 uv) const;
   bool hasNormalMap() const { return has_normal_map; }
+  bool hasSpecularMap() const { return has_specular_map; }
 };
 
 #endif  // RASTERIZER_MESH_H

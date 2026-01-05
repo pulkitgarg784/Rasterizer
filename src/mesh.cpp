@@ -158,9 +158,21 @@ void Mesh::load_normal_map(const std::string filename) {
     }
 }
 
+void Mesh::load_specular_map(const std::string filename) {
+    if (specular_map.read_tga_file(filename)) {
+        specular_map.flip_vertically();
+        has_specular_map = true;
+    }
+}
+
 TGAColor Mesh::diffuse(vec2 uv) const {
     if (!has_texture) return {255, 255, 255, 255};
     return diffuse_map.get(uv[0] * diffuse_map.width(), uv[1] * diffuse_map.height());
+}
+
+float Mesh::specular(vec2 uv) const {
+    if (!has_specular_map) return 1.0f;
+    return specular_map.get(uv[0] * specular_map.width(), uv[1] * specular_map.height())[0] / 1.0f;
 }
 
 vec3 Mesh::normal(vec2 uv) const {

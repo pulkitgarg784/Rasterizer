@@ -57,10 +57,12 @@ int main(int argc, char** argv) {
     int current_mesh_idx = find_index(mesh_files, "head.obj");
     int current_diffuse_idx = find_index(texture_files, "african_head_diffuse.tga");
     int current_nm_idx = find_index(texture_files, "african_head_nm_tangent.tga");
+    int current_spec_idx = find_index(texture_files, "african_head_spec.tga");
 
     RenderObject* obj = renderer.load_mesh("assets/head.obj");
     obj->mesh.load_texture("assets/african_head_diffuse.tga");
     obj->mesh.load_normal_map("assets/african_head_nm_tangent.tga");
+    obj->mesh.load_specular_map("assets/african_head_spec.tga");
 
     // UI Callback
     renderer.add_ui_callback([&]() {
@@ -95,6 +97,8 @@ int main(int argc, char** argv) {
                         if (!texture_files.empty()) {
                              obj->mesh.load_texture("assets/" + texture_files[current_diffuse_idx]);
                              obj->mesh.load_normal_map("assets/" + texture_files[current_nm_idx]);
+                             if (current_spec_idx >= 0 && current_spec_idx < texture_files.size())
+                                obj->mesh.load_specular_map("assets/" + texture_files[current_spec_idx]);
                         }
                     }
                     if (is_selected) ImGui::SetItemDefaultFocus();
@@ -122,6 +126,18 @@ int main(int argc, char** argv) {
                     if (ImGui::Selectable(texture_files[n].c_str(), is_selected)) {
                         current_nm_idx = n;
                         obj->mesh.load_normal_map("assets/" + texture_files[current_nm_idx]);
+                    }
+                    if (is_selected) ImGui::SetItemDefaultFocus();
+                }
+                ImGui::EndCombo();
+            }
+
+            if (ImGui::BeginCombo("Specular Map", (current_spec_idx >= 0 && current_spec_idx < texture_files.size()) ? texture_files[current_spec_idx].c_str() : "None")) {
+                for (int n = 0; n < texture_files.size(); n++) {
+                    bool is_selected = (current_spec_idx == n);
+                    if (ImGui::Selectable(texture_files[n].c_str(), is_selected)) {
+                        current_spec_idx = n;
+                        obj->mesh.load_specular_map("assets/" + texture_files[current_spec_idx]);
                     }
                     if (is_selected) ImGui::SetItemDefaultFocus();
                 }

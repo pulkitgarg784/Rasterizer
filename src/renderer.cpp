@@ -133,6 +133,8 @@ struct PhongShader : IShader {
         vec3 r = normalize(n * (dot(n, light_dir_vec) * 2.0) - light_dir_vec); // relflection vector
         double ambient = .3;
         double diff = std::max(0., dot(n, light_dir_vec));
+        
+        double specular_val = mesh.hasSpecularMap() ? mesh.specular(uv_interp) : 255.0;
         double spec = std::pow(std::max(r.z(), 0.), 35);
         for (int channel : {0,1,2})
             gl_FragColor[channel] *= std::min(1., (ambient + .4*diff + .9*spec) * intensity);
